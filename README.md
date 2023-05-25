@@ -1,12 +1,3 @@
-# Unmanic Plugins (examples)
-
-Here you will find examples to get you started in creating plugins for [Unmanic](https://github.com/Josh5/unmanic)
-
-Follow the Unmanic Documentation for:
- - [Creating your own repository to host plugins for Unmanic](https://docs.unmanic.app/docs/development/plugin_repos/creating_your_own_repo)
- - [Developing Plugins for Unmanic](https://docs.unmanic.app/docs/development/developing_plugins)
-
-
 ## Links
 
  - [Unmanic Documentation](https://docs.unmanic.app/docs/)
@@ -17,7 +8,7 @@ Follow the Unmanic Documentation for:
 
 This projected is licensed under th GPL version 3. 
 
-Copyright (C) Josh Sunnex - All Rights Reserved
+Copyright (C) Johan Oñate Bregell - All Rights Reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

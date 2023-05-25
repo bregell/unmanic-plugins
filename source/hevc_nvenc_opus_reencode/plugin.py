@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-    example_worker_process
+    hevc_nvenc_opus_reencode
 
     UNMANIC PLUGINS OVERVIEW:
 
@@ -40,10 +40,20 @@
             :param data     - Dictionary object of data that will configure how the FFMPEG process is executed.
 
 """
+import logging
 import os
 
 from unmanic.libs.unplugins.settings import PluginSettings
 from unmanic.libs.system import System
+
+from ffmpeg import StreamMapper, Probe, Parser
+
+from pyff.objects import MediaFile
+from pyff.fops import get_file_info, get_media_info
+from pyff.tcode import transcode_file, TranscodeJob, TranscodeResult
+
+# Configure plugin logger
+logger = logging.getLogger("Unmanic.Plugin.hevc_nvenc_opus_reencode")
 
 
 class Settings(PluginSettings):
@@ -61,9 +71,29 @@ class Settings(PluginSettings):
 
     """
     settings = {
-        "Execute Command": True,
-        "Insert string into cache file name": "custom-string"
     }
+
+def on_library_management_file_test(data):
+    """
+    Runner function - enables additional actions during the library management file tests.
+
+    The 'data' object argument includes:
+        path                            - String containing the full path to the file being tested.
+        issues                          - List of currently found issues for not processing the file.
+        add_file_to_pending_tasks       - Boolean, is the file currently marked to be added to the queue for processing.
+
+    :param data:
+    :return:
+
+    """
+    m_file = MediaFile(data.get('path'))
+    t_job = TranscodeJob(m_file, logger)
+    check_file(t_job)
+
+    data['add_file_to_pending_tasks'] = t_job.result.status
+    
+    return data
+
 
 
 def on_worker_process(data):
@@ -85,14 +115,67 @@ def on_worker_process(data):
     system = System()
     system_info = system.info()
 
-    custom_string = settings.get_setting('Insert string into cache file name')
-    if custom_string:
-        tmp_file_out = os.path.splitext(data['file_out'])
-        data['file_out'] = "{}-{}-{}{}".format(tmp_file_out[0], custom_string, tmp_file_out[1])
+    m_file = MediaFile(data.get('file_in'))
+    m_file_new = MediaFile(data.get('file_out'))
+    t_job = TranscodeJob(m_file, logger, new_file = m_file_new)
+    create_cmd(t_job)
 
-    if not settings.get_setting('Execute Command'):
-        data['exec_command'] = False
-
+    if t_job.result.status:
+        data['exec_command'] = t_job.args
         
+        # Set the parser
+        probe = Probe(logger, allowed_mimetypes=['video'])
+        parser = Parser(logger)
+        parser.set_probe(probe)
+        data['command_progress_parser'] = parser.parse_progress
+    
 
     return data
+
+################
+## Check file ##
+################
+def check_file(t_job):
+    # Check for _HEVC in filename
+    if "HEVC" in t_job.mediafile.name:
+        t_job.result = TranscodeResult(False, "File is HEVC")
+        return
+
+    # Get media info
+    mediainfo = get_media_info(t_job.mediafile)
+    if mediainfo == None:
+         t_job.result = TranscodeResult(False, "Could not parse media info")
+         return
+
+     # Check that files are not already transcoded (HEVC)
+    if os.path.isfile(t_job.new_file.name) == True:
+        t_job.result = TranscodeResult(False, "File already has HEVC version")
+        return
+    
+    t_job.result = TranscodeResult(True, "Add to pending tasks")
+    return 
+
+####################
+## Process a file ##
+####################
+def create_cmd(t_job):
+    # Get file info
+    result, txt = get_file_info(t_job.mediafile)
+    if result == False:
+        t_job.result = TranscodeResult(False, txt)
+        t_job.log.print(txt)
+        return
+    for v_stream in t_job.mediafile.getVideoStreams():
+        if v_stream.codec == "hevc":
+            txt = "File is HEVC"
+            t_job.result = TranscodeResult(False, txt)
+            t_job.log.print(txt)
+            return
+
+    # Start transcoding job
+    transcode_file(t_job)
+
+    txt = "Executing: {}".format(" ".join(t_job.args))
+    t_job.log.print(txt)
+
+    return

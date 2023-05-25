@@ -1,0 +1,61 @@
+    candidates = [f for f in files if ("_HEVC" not in f)]
+    candidates = list(zip(candidates, map(get_new_name, candidates)))
+
+    # Get file info for all files
+    pool = ThreadPool(8)
+    results = pool.map(get_file_info, candidates)
+    pool.close()
+    pool.join()
+
+    # Filter files
+    file_info_list = [r for r in results if (r != None or r["v_codec"] != "hevc")]
+
+    # Check that files are not already transcoded (_HEVC)
+    valid_files = [fi for fi in file_info_list if os.path.isfile(fi["f_new_name"]) == False]
+
+    # Transcode files
+    pool = ThreadPool(2)
+    results = pool.map(transcode_file, valid_files)
+    pool.close()
+    pool.join()
+
+    # Check results
+    for result, file_name in results:
+        if result == 0:
+            continue
+        for vf in valid_files:
+            if vf["f_name"] == file_name:
+                valid_files.remove(vf)
+                break
+            print (result)
+
+    old_tot_size = 0
+    new_tot_size = 0
+    for vf in valid_files:
+        if calculate_compression(vf, True) == True:
+            old_tot_size += vf["f_size"]
+            new_tot_size += vf["f_new_size"]
+
+    if old_tot_size > 0:
+        perc_tot_size = 100 * (1 - (new_tot_size / old_tot_size))
+    else:
+        perc_tot_size = 0
+    diff_tot_size = old_tot_size - new_tot_size
+    print("Old size: {} bytes\n \
+           New size: {} bytes\n \
+           Saved size: {} bytes\n \
+           Total comperssion: {:.2f} %" \
+           .format(humanize.naturalsize(old_tot_size, binary=True), \
+                   humanize.naturalsize(new_tot_size, binary=True), \
+                   humanize.naturalsize(diff_tot_size, binary=True), \
+                   perc_tot_size))
+
+    remove = False
+    print("\n\n")
+    if len(valid_files) > 0:
+
+
+    if remove == True:
+        for vf in valid_files:
+            os.remove(vf["f_name"])
+            print ("Removed: {}".format(vf["f_name"]))

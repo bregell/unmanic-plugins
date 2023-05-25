@@ -1,0 +1,1 @@
+Get season or filename (?:(\w+)|(?:(\w+)\\(S[0-9]{1,}|Season[\W]{0,1}[0-9]{1,})))$
