@@ -1,0 +1,3 @@
+[submodule "source/hevc_nvenc_opus_reencode/lib/ffmpeg"]
+	path = source/hevc_nvenc_opus_reencode/lib/ffmpeg
+	url = https://github.com/Josh5/unmanic.plugin.helpers.ffmpeg.git

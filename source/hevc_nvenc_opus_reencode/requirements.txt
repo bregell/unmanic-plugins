@@ -1,0 +1,6 @@
+chardet
+send2trash
+humanize
+guessit
+importlib-resources
+zipp

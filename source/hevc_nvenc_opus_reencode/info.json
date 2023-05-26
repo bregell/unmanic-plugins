@@ -1,9 +1,20 @@
 {
+    "author": "bregell",
+    "compatibility": [
+        1,
+        2
+    ],
+    "description": "Ensure all video streams are encoded with the H265/HEVC codec using the hevc_nvenc encoder and all audio is encoded with opus.",
+    "icon": "https://raw.githubusercontent.com/Josh5/unmanic.plugin.encoder_video_hevc_nvenc/master/icon.png",
     "id": "hevc_nvenc_opus_reencode",
     "name": "hevc_nvenc + opus Reencode",
-    "author": "bregell",
-    "version": "1.0.0",
-    "tags": "ffmpeg,worker,opus,hevc_nvenc",
-    "description": "An example plugin to show what a worker process plugin can do.",
-    "icon": "https://raw.githubusercontent.com/unmanic/unmanic/master/icon.png"
+    "platform": [
+        "all"
+    ],
+    "priorities": {
+        "on_library_management_file_test": 99,
+        "on_worker_process": 0
+    },
+    "tags": "video,encoder,ffmpeg,nvidia,hevc_nvenc,opus,worker",
+    "version": "1.0.38"
 }
