@@ -21,15 +21,16 @@
         If not, see <https://www.gnu.org/licenses/>.
 """
 
-from .audiostream import *
-from .mediafile import *
-from .subtitlefile import *
-from .subtitlestream import *
-from .videostream import *
-from .episode import Episode
-from .season import *
-from .series import *
-from .movie import *
-from .miniseries import *
+from __future__ import absolute_import
+import warnings
+
+from .transcode import TranscodeJob, TranscodeResult
+from .mediafile import MediaFile
 
 __author__ = 'Bregell (johan@bregell.se)'
+
+__all__ = (
+    'TranscodeJob',
+    'TranscodeResult',
+    'MediaFile',
+)

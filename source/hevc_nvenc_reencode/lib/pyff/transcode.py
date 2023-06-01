@@ -22,9 +22,8 @@
 """
 
 import re
-from logging import Logger
 
-from hevc_nvenc_opus_reencode.lib.pyff.objects.mediafile import MediaFile
+from .mediafile import MediaFile
 
 class TranscodeResult(object):
     def __init__(self, status = True, string = None):
@@ -53,12 +52,12 @@ class TranscodeResult(object):
 
 
 class TranscodeJob(object):
-    def __init__(self, mediafile, log : Logger, args = None, result = None, new_file = None):
-        self.mediafile = mediafile
+    def __init__(self, mediafile, log, args = None, result = None, new_file = None):
         self.log = log
+        self.mediafile = mediafile
         self.args = ([] if args == None else args)
         self.result = (TranscodeResult() if result == None else result)
-        self.new_file = (MediaFile("") if new_file == None else new_file)
+        self.new_file = (MediaFile("", None) if new_file == None else new_file)
 
     @property
     def mediafile(self):
@@ -66,8 +65,6 @@ class TranscodeJob(object):
 
     @mediafile.setter
     def mediafile(self, mediafile):
-        if isinstance(mediafile, MediaFile) == False:
-            raise TypeError("MediaFile is wrong type")
         self.__mediafile = mediafile
 
     @property
@@ -76,8 +73,6 @@ class TranscodeJob(object):
 
     @result.setter
     def result(self, result):
-        if isinstance(result, TranscodeResult) == False:
-            raise TypeError("Result must be TranscodeResult")
         self.__result = result
 
     @property
@@ -86,12 +81,9 @@ class TranscodeJob(object):
 
     @new_file.setter
     def new_file(self, new_file):
-        if isinstance(new_file, MediaFile) == False:
-            raise TypeError("new_file must be of type MediaFile")
         self.__new_file = new_file
 
     def create_cmd(self, print_debug = False):
-
         txt = self.mediafile.getInfo()
         if print_debug == True:
             self.log.debug(txt)
@@ -100,7 +92,7 @@ class TranscodeJob(object):
             raise Exception(txt)
 
         # Use ffmpeg
-        self.args = ["ffmpeg.exe", "-hide_banner", "-loglevel", "info", "-vsync", "0"]
+        self.args = ["ffmpeg", "-hide_banner", "-loglevel", "info", "-vsync", "0"]
 
         # Extend stream scan for VOB
         if ".vob" in self.mediafile.name:
@@ -108,19 +100,21 @@ class TranscodeJob(object):
         else :
             self.args.extend(["-analyzeduration", "250M", "-probesize", "250M"])
 
-        v_index = 0
-        for v_stream in self.mediafile.getVideoStreams():
+        #v_index = 0
+        #for v_stream in self.mediafile.getVideoStreams():
+            # self.args.extend(["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-c:v:{}".format(v_index)])
             # Use hwaccel for x264, mpeg4, mpeg2 decoding
-            if v_stream.codec in ["h264", "mpeg2", "mpeg2video"]: # "mpeg4"
-                #self.args.extend(["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-c:v:{}".format(v_index)])
-                self.args.extend(["-hwaccel", "cuvid", "-c:v:{}".format(v_index)])
-                if v_stream.codec == "h264":
-                    self.args.extend(["h264_cuvid"])
-                elif v_stream.codec == "mpeg4": # Disabled
-                    self.args.extend(["mpeg4_cuvid"])
-                elif v_stream.codec in ["mpeg2", "mpeg2video"]:
-                    self.args.extend(["mpeg2_cuvid"])
+            # if v_stream.codec in ["h264", "mpeg2", "mpeg2video"]: # "mpeg4"
+                #self.args.extend(["-hwaccel", "cuvid", "-c:v:{}".format(v_index)])
+                #if v_stream.codec == "h264":
+                #    self.args.extend(["h264_cuvid"])
+                #elif v_stream.codec == "mpeg4": # Disabled
+                #    self.args.extend(["mpeg4_cuvid"])
+                #elif v_stream.codec in ["mpeg2", "mpeg2video"]:
+                #    self.args.extend(["mpeg2_cuvid"])
 
+        # Set decode hwaccel
+        self.args.extend(["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"])
         # Add main input file
         self.args.extend(["-i", self.mediafile.name])
 
@@ -130,7 +124,7 @@ class TranscodeJob(object):
             self.args.extend(["-sub_charenc", s_file.encoding, "-i", s_file.name])
             m_index += 1
 
-        # Get main video steam
+        # Loop over video steams
         for v_stream in self.mediafile.getVideoStreams():
             self.args.extend(["-map", "0:{}".format(v_stream.index)])
 
@@ -153,14 +147,14 @@ class TranscodeJob(object):
             # Encode to HEVC with nvenc
             self.args.extend(["-c:v:{}".format(v_index), "hevc_nvenc"])
             # Use preset slow, vbr_hq, 2pass
-            self.args.extend(["-preset", "slow", "-rc", "vbr_hq", "-rc-lookahead", "32"])
+            self.args.extend(["-preset", "slow", "-rc", "vbr", "-rc-lookahead", "32"])
             # Requested Quality
             self.args.extend(["-cq", "28"])
             # Intra Frames
             self.args.extend(["-g", "250"])
             # Quality Min - Max
             self.args.extend(["-qmin", "0", "-qmax", "34"])
-            # Set bitrate targets, bitrate=0 maxrate=2*input_bitrate
+            # Set bitrate targets, bitrate=0 maxrate=input_bitrate
             self.args.extend(["-b:v:{}".format(v_index), "0", "-maxrate", str(v_stream.bitrate)])
             # Set buffer to 2 * maxrate
             self.args.extend(["-bufsize", str(v_stream.bitrate * 2)])
@@ -171,27 +165,9 @@ class TranscodeJob(object):
         # Config audio streams
         a_index = 0
         for a_stream in self.mediafile.getAudioStreams():
-            # Set audio encoder
-            if a_stream.codec == 'copy':
-                a_encoder = "copy"
-            elif a_stream.codec != 'opus':
-                a_encoder = "libopus"
-            else:
-                a_encoder = "copy"
-
             # Audio encoder settings
+            a_encoder = "copy"
             self.args.extend(["-c:a:{}".format(a_index), a_encoder])
-
-            # If audio is not copy add channelmap and encoder settings
-            if a_encoder != "copy":
-                # Remove side and wide channels
-                a_stream.channel_layout = re.search(r'^[^\(]+', a_stream.channel_layout).group(0)
-                # Set channel_layout
-                channel_config = "channelmap=channel_layout={}".format(a_stream.channel_layout)
-                # Set compression level to "lossless"
-                self.args.extend(["-filter:a:{}".format(a_index), channel_config, "-compression_level", "10"])
-                # Set bitrate
-                self.args.extend(["-b:a:{}".format(a_index), "{}".format(a_stream.bitrate)])
             a_index += 1
 
         # Config subtitle streams
@@ -203,7 +179,4 @@ class TranscodeJob(object):
 
         # Set output filename
         self.args.extend(["-f", "matroska", self.new_file.name])
-        txt = "FFmpeg Command: {}".format(" ".join(self.args))
-        self.log.info(txt)
-
         return

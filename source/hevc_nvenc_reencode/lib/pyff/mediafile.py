@@ -21,19 +21,29 @@
         If not, see <https://www.gnu.org/licenses/>.
 """
 
+import os
 import subprocess
 import json
 import re
+from difflib import SequenceMatcher
+
+from guessit import guessit as guessit
 
 from .basefile import BaseFile
 from .videostream import VideoStream
 from .audiostream import AudioStream
 from .subtitlestream import SubtitleStream
 from .subtitlefile import SubtitleFile
+from .season import Season
+from .series import Series
+from .movie import Movie
+from .miniseries import MiniSeries
+from .episode import Episode
 
 class MediaFile(BaseFile):
-    def __init__(self, name, size = 0, length = 0.0, v_streams = None, a_streams = None, s_streams = None, s_files = None):
+    def __init__(self, name, log, size = 0, length = 0.0, v_streams = None, a_streams = None, s_streams = None, s_files = None):
         BaseFile.__init__(self, name, size)
+        self.log = log
         self.length = length
         self.v_streams  = ([] if v_streams  == None else v_streams)
         self.a_streams  = ([] if a_streams  == None else a_streams)
@@ -55,32 +65,24 @@ class MediaFile(BaseFile):
         return self.v_streams
 
     def appendVideoStream(self, v_stream):
-        if type(v_stream) is not VideoStream:
-            raise TypeError("Must be of type VideoStream")
         self.v_streams.append(v_stream)
 
     def getAudioStreams(self):
         return self.a_streams
 
     def appendAudioStream(self, a_stream):
-        if type(a_stream) is not AudioStream:
-            raise TypeError("Must be of type AudioStream")
         self.a_streams.append(a_stream)
 
     def getSubtitleStreams(self):
         return self.s_streams
 
     def appendSubtitleStream(self, s_stream):
-        if type(s_stream) is not SubtitleStream:
-            raise TypeError("Must be of type SubtitleStream")
         self.s_streams.append(s_stream)
 
     def getSubtitleFiles(self):
         return self.s_files
 
     def appendSubtitleFile(self, s_file):
-        if type(s_file) is not SubtitleFile:
-            raise TypeError("Must be of type SubtitleFile")
         self.s_files.append(s_file)
 
     def getInfo(self):
@@ -128,7 +130,7 @@ class MediaFile(BaseFile):
             return False, txt
 
         data = info_json.decode('utf8')
-        self.log.warning(data)
+        # self.log.warning(data)
         json_data = json.loads(data)
 
         # Get file size
@@ -270,3 +272,94 @@ class MediaFile(BaseFile):
 
         self.__info_populated = True
         return True, "Success"
+
+    def get_media_info(self):
+        m_type = self.__get_type(self.name)
+        if m_type == None:
+            return None
+        m_title = self.__get_title(self.name, m_type)
+        if m_title == None:
+            return None
+        m_type.title = m_title
+        if isinstance(m_type, Series):
+            m_episode = self.__get_episode(self.name, m_title)
+            if m_episode == None:
+                return None
+            m_season = self.__get_season(self.name)
+            if m_season == None:
+                return None
+            m_season.addEpisode(m_episode)
+            m_type.addSeason(m_season)
+        elif isinstance(m_type, MiniSeries):
+            m_episode = self.__get_episode(self.name, m_title)
+            if m_episode == None:
+                return None
+            m_type.addEpisode(m_episode)
+        return m_type
+
+    def __get_episode(full_name, m_title):
+        # Get file name
+        _, f_name = os.path.split(full_name)
+        # Get Episode info
+        info = guessit(f_name)
+        # Check type
+        if "type" in info and info["type"] != "episode":
+            return None
+        # Episode number
+        if "episode" not in info:
+            return None
+        ep_number = info["episode"]
+        # Episode title
+        ep_title = ""
+        if "episode_title" in info:
+            ratio = SequenceMatcher(None, m_title.lower(), info["episode_title"].lower()).ratio()
+            if ratio <= 0.6:
+                ep_title = info["episode_title"]
+        elif "title" in info:
+            ratio = SequenceMatcher(None, m_title.lower(), info["title"].lower()).ratio()
+            if ratio <= 0.6:
+                ep_title = info["title"]
+        # Create episode
+        m_episode = Episode(ep_title, ep_number, 0.0)
+        return m_episode
+
+    def __get_season(f_name):
+        # Get season (if possible)
+        info = guessit(f_name)
+        s_number = 1
+        if "season" in info:
+            s_number = info["season"]
+        m_season = Season(s_number)
+        return m_season
+
+    def __get_type(f_name):
+        f_path, f_name = os.path.split(f_name)
+        # Get file type
+        type_rx = re.compile(r"(s([0-9]{1,}))", re.I)
+        type_rxe = re.compile(r"(e([0-9]{1,}))", re.I)
+        type_res = type_rx.search(f_path)
+        type_res2 = type_rx.search(f_name)
+        type_res3 = type_rxe.search(f_name)
+        if type_res != None or type_res2 != None:
+            # Series
+            m_type = Series("")
+        elif type_res3 != None:
+            # Mini Series
+            m_type = MiniSeries("")
+        else:
+            # Movive
+            m_type = Movie("", 0.0)
+        return m_type
+
+    def __get_title(f_name, m_type):
+        m_title = None
+        f_path, f_name = os.path.split(f_name)
+        parts = f_path.split("\\")
+        if isinstance(m_type, (Movie, MiniSeries)):
+            m_title = parts[-1:][0]
+        elif isinstance(m_type, Series):
+            m_title = parts[-2:-1][0]
+        info = guessit(f_name)
+        if "title" in info: # and info["title"].lower() in m_title.lower():
+            m_title = info["title"]
+        return m_title

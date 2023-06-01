@@ -47,10 +47,7 @@ from unmanic.libs.unplugins.settings import PluginSettings
 from unmanic.libs.system import System
 
 from hevc_nvenc_opus_reencode.lib.ffmpeg import Probe, Parser
-from hevc_nvenc_opus_reencode.lib.pyff.objects import MediaFile
-from hevc_nvenc_opus_reencode.lib.pyff.fops.file_info import get_file_info
-from hevc_nvenc_opus_reencode.lib.pyff.fops.file_rename import get_media_info
-from hevc_nvenc_opus_reencode.lib.pyff.tcode import TranscodeJob, TranscodeResult
+from hevc_nvenc_opus_reencode.lib.pyff import MediaFile, TranscodeJob, TranscodeResult
 
 # Configure plugin logger
 logger = logging.getLogger("Unmanic.Plugin.hevc_nvenc_opus_reencode")
@@ -87,18 +84,40 @@ def on_library_management_file_test(data):
 
     """
 
-    logger.warning(data.get('path'))
-    m_file = MediaFile(data.get('path'))
-    logger.warning(m_file.name)
-    logger.warning(type(m_file).__name__)
-    test = isinstance(m_file, MediaFile)
-    logger.warning(str(test))
-    txt = m_file.getInfo()
-    logger.warning(txt)
+    m_file = MediaFile(name = data.get('path'), log = logger)
     t_job = TranscodeJob(m_file, logger)
-    logger.warning(type(t_job).__name__)
 
-    check_file(t_job)
+    # Check for _HEVC in filename
+    if "HEVC" in t_job.mediafile.name:
+        txt = "{}: File is HEVC".format(t_job.mediafile.name)
+        t_job.result = TranscodeResult(False, txt)
+        t_job.log.info(txt)
+        return data
+
+    if "x265" in t_job.mediafile.name:
+        txt = "{}: File is x265".format(t_job.mediafile.name)
+        t_job.result = TranscodeResult(False, txt)
+        t_job.log.info(txt)
+        return data
+
+    # Get file info
+    txt = t_job.mediafile.getInfo()
+    if len(t_job.mediafile.getVideoStreams()) == 0:
+        t_job.result = TranscodeResult(False, txt)
+        t_job.log.warning(txt)
+        return data
+
+    # Check streams
+    for v_stream in t_job.mediafile.getVideoStreams():
+        if v_stream.codec == "hevc":
+            txt = "File is HEVC"
+            t_job.result = TranscodeResult(False, txt)
+            t_job.log.warning(txt)
+            return data
+
+    txt = "{}: Add to pending tasks".format(t_job.mediafile.name)
+    t_job.result = TranscodeResult(True, txt)
+    t_job.log.info(txt)
 
     data['add_file_to_pending_tasks'] = t_job.result.status
 
@@ -125,26 +144,12 @@ def on_worker_process(data):
     system = System()
     system_info = system.info()
 
-    logger.warning(data.get('file_in'))
-    m_file = MediaFile(data.get('file_in'))
-    logger.warning(type(m_file))
-    m_file_new = MediaFile(data.get('file_out'))
-    logger.warning(type(m_file_new))
-    t_job = TranscodeJob(m_file, logger, new_file = m_file_new)
-    logger.warning(type(t_job))
+    in_abs = os.path.abspath(data.get('file_in'))
+    out_abs = os.path.abspath(data.get('file_out'))
 
-    # Get file info
-    txt = t_job.mediafile.getInfo()
-    if txt == "":
-        t_job.result = TranscodeResult(False, txt)
-        t_job.log.warning(txt)
-        return
-    for v_stream in t_job.mediafile.getVideoStreams():
-        if v_stream.codec == "hevc":
-            txt = "File is HEVC"
-            t_job.result = TranscodeResult(False, txt)
-            t_job.log.warning(txt)
-            return
+    m_file = MediaFile(in_abs, log = logger)
+    m_file_new = MediaFile(out_abs, log = logger)
+    t_job = TranscodeJob(m_file, logger, new_file = m_file_new)
 
     # Start transcoding job
     t_job.create_cmd()
@@ -157,40 +162,12 @@ def on_worker_process(data):
         data['exec_command'] = t_job.args
 
         # Set the parser
+         # Get the path to the file
+        abspath = data.get('file_in')
         probe = Probe(logger, allowed_mimetypes=['video'])
+        probe.file(abspath)
         parser = Parser(logger)
         parser.set_probe(probe)
         data['command_progress_parser'] = parser.parse_progress
 
     return data
-
-################
-## Check file ##
-################
-def check_file(t_job):
-    # Check for _HEVC in filename
-    if "HEVC" in t_job.mediafile.name:
-        txt = "{}: File is HEVC".format(t_job.mediafile.name)
-        t_job.result = TranscodeResult(False, txt)
-        t_job.log.info(txt)
-        return
-
-    # Get media info
-    mediainfo = get_media_info(t_job.mediafile)
-    if mediainfo == None:
-         txt = "{}: Could not parse media info".format(t_job.mediafile.name)
-         t_job.result = TranscodeResult(False, txt)
-         t_job.log.info(txt)
-         return
-
-     # Check that files are not already transcoded (HEVC)
-    if os.path.isfile(t_job.new_file.name) == True:
-        txt = "{}: File already has HEVC version".format(t_job.mediafile.name)
-        t_job.result = TranscodeResult(False, "File already has HEVC version")
-        t_job.log.info(txt)
-        return
-
-    txt = "{}: Add to pending tasks".format(t_job.mediafile.name)
-    t_job.result = TranscodeResult(True, txt)
-    t_job.log.info(txt)
-    return
