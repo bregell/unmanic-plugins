@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-    hevc_nvenc_opus_reencode
+    opus_reencode
 
     UNMANIC PLUGINS OVERVIEW:
 
@@ -40,14 +40,18 @@
             :param data     - Dictionary object of data that will configure how the FFMPEG process is executed.
 
 """
+from logging import Logger
 import logging
 import os
+import re
 
 from unmanic.libs.unplugins.settings import PluginSettings
 from unmanic.libs.system import System
 
+from opus.lib.pyff import MediaFile, TranscodeJob
+
 # Configure plugin logger
-logger = logging.getLogger("Unmanic.Plugin.opus_reencode")
+logger = logging.getLogger("Unmanic.Plugin.opus")
 
 
 class Settings(PluginSettings):
@@ -67,23 +71,18 @@ class Settings(PluginSettings):
     settings = {
     }
 
-def on_library_management_file_test(data):
-    """
-    Runner function - enables additional actions during the library management file tests.
+def check_run(m_file: MediaFile) -> bool:
+    normalize = True
 
-    The 'data' object argument includes:
-        path                            - String containing the full path to the file being tested.
-        issues                          - List of currently found issues for not processing the file.
-        add_file_to_pending_tasks       - Boolean, is the file currently marked to be added to the queue for processing.
+    for a_stream in m_file.getAudioStreams():
+        logger.debug("Stream codec: {}".format(a_stream.codec))
+        logger.debug("Stream channels: {}".format(a_stream.channels))
+        logger.debug("Stream layout: {}".format(a_stream.channel_layout))
+        if a_stream.codec == "opus":
+            normalize = False
 
-    :param data:
-    :return:
-
-    """
-
-    data['add_file_to_pending_tasks'] = True
-
-    return data
+    logger.debug("Opus encode: {}".format(str(normalize)))
+    return normalize
 
 
 
@@ -109,20 +108,53 @@ def on_worker_process(data):
     in_abs = os.path.abspath(data.get('file_in'))
     out_abs = os.path.abspath(data.get('file_out'))
 
-    cmd = ['ffmpeg-normalize', in_abs, "-o", out_abs, "-v", "-nt", "ebu", "-c:a opus", "-b:a", "320k", "-ar", "48khz"]
+    m_file = MediaFile(name = in_abs, log = logger)
+    m_file.getInfo()
 
-    txt = "Executing: {}".format(" ".join(cmd))
-    logger.info(txt)
+    run_opus = check_run(m_file)
 
-    data['exec_command'] = cmd
+    if run_opus:
+        m_file_new = MediaFile(out_abs, log = logger)
+        t_job = TranscodeJob(m_file, logger, new_file = m_file_new)
 
-    # Set the parser
-    # Get the path to the file
-    abspath = data.get('file_in')
-    probe = Probe(logger, allowed_mimetypes=['video'])
-    probe.file(abspath)
-    parser = Parser(logger)
-    parser.set_probe(probe)
-    data['command_progress_parser'] = parser.parse_progress
+        t_job.create_cmd()
+
+        txt = "Executing: {}".format(" ".join(t_job.args))
+        t_job.log.debug(txt)
+
+        # Set exec cmd
+        data['exec_command'] = t_job.args
+
+        # Create parser
+        parser = Parser(logger, m_file.length)
+
+        # Set the parser
+        data['command_progress_parser'] = parser.parse
 
     return data
+
+
+class Parser(object):
+    data = {
+        'percent': 0
+    }
+    percent = 0
+
+    def __init__(self, logger: Logger, length: float = 0):
+        self.logger = logger
+        self.length = length
+
+    def parse(self, line_text: str) -> dict:
+
+        # Search for time in the progress bar line output
+        time_re = re.compile(r"time=([0-9:.]{1,})")
+        re_result = time_re.search(line_text)
+        if re_result != None:
+            h, m, s = re_result.group(1).split(':')
+            time = int(h) * 3600 + int(m) * 60 + float(s)
+            self.percent = round((time / self.length) * 100)
+
+        self.data = {
+            'percent': self.percent
+        }
+        return self.data

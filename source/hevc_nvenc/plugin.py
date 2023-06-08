@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-    hevc_nvenc_opus_reencode
+    hevc_nvenc
 
     UNMANIC PLUGINS OVERVIEW:
 
@@ -46,11 +46,11 @@ import os
 from unmanic.libs.unplugins.settings import PluginSettings
 from unmanic.libs.system import System
 
-from hevc_nvenc_opus_reencode.lib.ffmpeg import Probe, Parser
-from hevc_nvenc_opus_reencode.lib.pyff import MediaFile, TranscodeJob, TranscodeResult
+from hevc_nvenc.lib.ffmpeg import Probe, Parser
+from hevc_nvenc.lib.pyff import MediaFile, TranscodeJob, TranscodeResult
 
 # Configure plugin logger
-logger = logging.getLogger("Unmanic.Plugin.hevc_nvenc_opus_reencode")
+logger = logging.getLogger("Unmanic.Plugin.hevc_nvenc")
 
 
 class Settings(PluginSettings):
@@ -70,7 +70,7 @@ class Settings(PluginSettings):
     settings = {
     }
 
-def on_library_management_file_test(data):
+def check_run(m_file: MediaFile) -> bool:
     """
     Runner function - enables additional actions during the library management file tests.
 
@@ -84,46 +84,33 @@ def on_library_management_file_test(data):
 
     """
 
-    m_file = MediaFile(name = data.get('path'), log = logger)
-    t_job = TranscodeJob(m_file, logger)
 
-    # Check for _HEVC in filename
-    if "HEVC" in t_job.mediafile.name:
-        txt = "{}: File is HEVC".format(t_job.mediafile.name)
-        t_job.result = TranscodeResult(False, txt)
-        t_job.log.info(txt)
-        return data
+    # Check for HEVC in filename
+    if "hevc" in m_file.name.lower():
+        txt = "{}: File is HEVC".format(m_file.name)
+        m_file.log.debug(txt)
+        return False
 
-    if "x265" in t_job.mediafile.name:
-        txt = "{}: File is x265".format(t_job.mediafile.name)
-        t_job.result = TranscodeResult(False, txt)
-        t_job.log.info(txt)
-        return data
+    if "x265" in m_file.name.lower():
+        txt = "{}: File is x265".format(m_file.name)
+        m_file.log.debug(txt)
+        return False
+
+    if "h265" in m_file.name.lower():
+        txt = "{}: File is h265".format(m_file.name)
+        m_file.log.debug(txt)
+        return False
 
     # Get file info
-    txt = t_job.mediafile.getInfo()
-    if len(t_job.mediafile.getVideoStreams()) == 0:
-        t_job.result = TranscodeResult(False, txt)
-        t_job.log.warning(txt)
-        return data
+    txt = m_file.getInfo()
+    if len(m_file.getVideoStreams()) == 0:
+        m_file.log.debug(txt)
+        return False
 
-    # Check streams
-    for v_stream in t_job.mediafile.getVideoStreams():
-        if v_stream.codec == "hevc":
-            txt = "File is HEVC"
-            t_job.result = TranscodeResult(False, txt)
-            t_job.log.warning(txt)
-            return data
+    txt = "{}: Add to pending tasks".format(m_file.name)
+    m_file.log.debug(txt)
 
-    txt = "{}: Add to pending tasks".format(t_job.mediafile.name)
-    t_job.result = TranscodeResult(True, txt)
-    t_job.log.info(txt)
-
-    data['add_file_to_pending_tasks'] = t_job.result.status
-
-    return data
-
-
+    return True
 
 def on_worker_process(data):
     """
@@ -148,26 +135,29 @@ def on_worker_process(data):
     out_abs = os.path.abspath(data.get('file_out'))
 
     m_file = MediaFile(in_abs, log = logger)
-    m_file_new = MediaFile(out_abs, log = logger)
-    t_job = TranscodeJob(m_file, logger, new_file = m_file_new)
+    m_file.getInfo()
 
-    # Start transcoding job
-    t_job.create_cmd()
+    run_hevc = check_run(m_file)
 
-    txt = "Executing: {}".format(" ".join(t_job.args))
-    t_job.log.info(txt)
+    if run_hevc:
+        m_file_new = MediaFile(out_abs, log = logger)
+        t_job = TranscodeJob(m_file, logger, new_file = m_file_new)
 
+        # Start transcoding job
+        t_job.create_cmd()
 
-    if t_job.result.status:
-        data['exec_command'] = t_job.args
+        txt = "Executing: {}".format(" ".join(t_job.args))
+        t_job.log.debug(txt)
 
-        # Set the parser
-         # Get the path to the file
-        abspath = data.get('file_in')
-        probe = Probe(logger, allowed_mimetypes=['video'])
-        probe.file(abspath)
-        parser = Parser(logger)
-        parser.set_probe(probe)
-        data['command_progress_parser'] = parser.parse_progress
+        if t_job.result.status:
+            data['exec_command'] = t_job.args
+
+            # Set the parser
+            # Get the path to the file
+            probe = Probe(logger, allowed_mimetypes=['video'])
+            probe.file(in_abs)
+            parser = Parser(logger)
+            parser.set_probe(probe)
+            data['command_progress_parser'] = parser.parse_progress
 
     return data

@@ -100,21 +100,22 @@ class TranscodeJob(object):
         else :
             self.args.extend(["-analyzeduration", "250M", "-probesize", "250M"])
 
-        #v_index = 0
-        #for v_stream in self.mediafile.getVideoStreams():
-            # self.args.extend(["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-c:v:{}".format(v_index)])
+        v_index = 0
+        for v_stream in self.mediafile.getVideoStreams():
             # Use hwaccel for x264, mpeg4, mpeg2 decoding
-            # if v_stream.codec in ["h264", "mpeg2", "mpeg2video"]: # "mpeg4"
-                #self.args.extend(["-hwaccel", "cuvid", "-c:v:{}".format(v_index)])
-                #if v_stream.codec == "h264":
-                #    self.args.extend(["h264_cuvid"])
-                #elif v_stream.codec == "mpeg4": # Disabled
-                #    self.args.extend(["mpeg4_cuvid"])
-                #elif v_stream.codec in ["mpeg2", "mpeg2video"]:
-                #    self.args.extend(["mpeg2_cuvid"])
+            if v_stream.codec in ["h264", "mpeg2", "mpeg2video"]: # "mpeg4"
+                self.args.extend(["-hwaccel", "cuvid", "-c:v:{}".format(v_index)])
+                if v_stream.codec == "h264":
+                    self.args.extend(["h264_cuvid"])
+                elif v_stream.codec == "mpeg4": # Disabled
+                    self.args.extend(["mpeg4_cuvid"])
+                elif v_stream.codec in ["mpeg2", "mpeg2video"]:
+                    self.args.extend(["mpeg2_cuvid"])
+            else:
+                # Set decode hwaccel
+                #self.args.extend(["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-c:v:{}".format(v_index)])
+                self.args.extend(["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"])
 
-        # Set decode hwaccel
-        self.args.extend(["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"])
         # Add main input file
         self.args.extend(["-i", self.mediafile.name])
 

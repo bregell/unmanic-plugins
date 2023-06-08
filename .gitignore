@@ -29,3 +29,5 @@ source/skeleton_plugin/**
 
 repo/
 source/*/site-packages
+
+.vscode

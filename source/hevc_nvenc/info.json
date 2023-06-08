@@ -4,10 +4,10 @@
         1,
         2
     ],
-    "description": "Ensure all audio streams are encoded with opus and normalized",
+    "description": "Ensure all video streams are encoded with the H265/HEVC codec using the hevc_nvenc encoder.",
     "icon": "https://raw.githubusercontent.com/Josh5/unmanic.plugin.encoder_video_hevc_nvenc/master/icon.png",
-    "id": "opus_reencode",
-    "name": "opus reencode",
+    "id": "hevc_nvenc",
+    "name": "hevc_nvenc reencode",
     "platform": [
         "all"
     ],
@@ -15,6 +15,6 @@
         "on_library_management_file_test": 99,
         "on_worker_process": 0
     },
-    "tags": "audio,encoder,ffmpeg,opus,worker",
-    "version": "1.0.0"
+    "tags": "video,encoder,ffmpeg,nvidia,hevc_nvenc,worker",
+    "version": "1.0.71"
 }

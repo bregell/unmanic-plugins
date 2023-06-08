@@ -1,0 +1,20 @@
+{
+    "author": "bregell",
+    "compatibility": [
+        1,
+        2
+    ],
+    "description": "Ensure all audio streams are encoded with opus and normalized with ebu",
+    "icon": "https://raw.githubusercontent.com/Josh5/unmanic.plugin.encoder_video_hevc_nvenc/master/icon.png",
+    "id": "opus",
+    "name": "opus reencode",
+    "platform": [
+        "all"
+    ],
+    "priorities": {
+        "on_library_management_file_test": 99,
+        "on_worker_process": 0
+    },
+    "tags": "audio,encoder,ffmpeg,opus,worker",
+    "version": "1.0.35"
+}

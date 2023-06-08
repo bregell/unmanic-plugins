@@ -27,6 +27,8 @@ import json
 import re
 from difflib import SequenceMatcher
 
+from typing import List
+
 from guessit import guessit as guessit
 
 from .basefile import BaseFile
@@ -67,7 +69,7 @@ class MediaFile(BaseFile):
     def appendVideoStream(self, v_stream):
         self.v_streams.append(v_stream)
 
-    def getAudioStreams(self):
+    def getAudioStreams(self) -> List[AudioStream]:
         return self.a_streams
 
     def appendAudioStream(self, a_stream):
